@@ -22,6 +22,6 @@ const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 // Export what you need
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export { analytics };
+export { app, analytics };
 
 console.log("Firebase app name:", app.name);
