@@ -3,7 +3,9 @@
 interface SummarySectionProps {
   totalSpent: number;
   categoryTotals: Record<string, number>;
+  totalIncome: number;
 }
+
 interface SummaryCardProps {
   title: string;
   value: string | number;
@@ -17,11 +19,19 @@ export const SummaryCard = ({ title, value }: SummaryCardProps) => {
     </div>
   );
 };
-export const SummarySection = ({ totalSpent, categoryTotals }: SummarySectionProps) => {
+
+export const SummarySection = ({
+  totalSpent,
+  categoryTotals,
+  totalIncome,
+}: SummarySectionProps) => {
   return (
     <div className="w-full mb-6">
       <h2 className="text-2xl font-bold mb-4 text-left">Summary</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        {/* Total income */}
+        <SummaryCard title="Total Income" value={`$${totalIncome}`} />
+
         {/* Total spent */}
         <SummaryCard title="Total Spent" value={`$${totalSpent}`} />
 
@@ -33,4 +43,3 @@ export const SummarySection = ({ totalSpent, categoryTotals }: SummarySectionPro
     </div>
   );
 };
-

@@ -3,17 +3,23 @@ import { Transaction } from "@/types/transaction";
 interface Props {
   transaction: Transaction;
   onDelete: (id: string) => void;
-  onEdit: (transaction: Transaction) => void;
+  onEdit: (transaction: Transaction, type: "expense" | "income") => void;
 }
 
-export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
+export const TransactionItem = ({
+  transaction,
+  onDelete,
+  onEdit
+}: Props) => {
   return (
     <li className="flex justify-between px-3 py-2 bg-gray-100 rounded-lg">
-      <span>{transaction.description} ({transaction.category})</span>
+      <span>
+        {transaction.description} {transaction.category && (transaction.category)}
+      </span>
       <div className="flex items-center gap-2">
         <span>${transaction.amount}</span>
         <button
-          onClick={() => onEdit(transaction)}
+          onClick={() => onEdit(transaction, transaction.type)}
           className="text-blue-600 hover:text-blue-800"
         >
           ✏️

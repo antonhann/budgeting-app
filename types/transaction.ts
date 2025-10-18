@@ -3,4 +3,7 @@ export interface Transaction {
   description: string;
   amount: number;
   category: string;
+  type: "income" | "expense"; // add type
+  userId: string;
+  createdAt: Date;
 }

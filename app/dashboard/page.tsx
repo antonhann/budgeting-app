@@ -17,27 +17,28 @@ import {
 } from "firebase/firestore";
 import { Transaction } from "@/types/transaction";
 import { TransactionItem } from "@/app/dashboard/TransactionItem";
-import { TransactionModal } from "@/app/dashboard/TransactionModal";
+import { ExpenseModal } from "@/app/dashboard/Expense/ExpenseModal";
+import { IncomeModal } from "@/app/dashboard/Income/IncomeModal";
 import { SummarySection } from "./SummarySection";
 
 export default function Dashboard() {
   const [user, setUser] = useState<typeof auth.currentUser | null>(null);
-  const [loading, setLoading] = useState(true); // track auth loading
+  const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isExpenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [isIncomeModalOpen, setIncomeModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
 
   const [totalSpent, setTotalSpent] = useState(0);
-  const [categoryTotals, setCategoryTotals] = useState<Record<string, number>>(
-    {}
-  );
+  const [totalIncome, setTotalIncome] = useState(0);
+  const [categoryTotals, setCategoryTotals] = useState<Record<string, number>>({});
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
+  const [type, setType] = useState<"income" | "expense">("expense");
 
-  // 🔹 Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -46,7 +47,6 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  // 🔹 Fetch transactions only after user is loaded
   useEffect(() => {
     if (!user) return;
 
@@ -62,92 +62,107 @@ export default function Dashboard() {
         ...(doc.data() as Omit<Transaction, "id">),
       }));
       setTransactions(data);
-      // --- Calculate summary ---
-      let total = 0;
+
+      let spent = 0;
+      let income = 0;
       const categoryMap: Record<string, number> = {};
 
       data.forEach((t) => {
-        total += t.amount;
-        if (categoryMap[t.category]) {
-          categoryMap[t.category] += t.amount;
+        if (t.type === "expense") {
+          spent += t.amount;
+          categoryMap[t.category] = (categoryMap[t.category] || 0) + t.amount;
         } else {
-          categoryMap[t.category] = t.amount;
+          income += t.amount;
         }
       });
-      setTotalSpent(total);
+
+      setTotalSpent(spent);
       setCategoryTotals(categoryMap);
+      setTotalIncome(income);
     });
 
     return () => unsubscribe();
   }, [user]);
 
-  const handleAddTransaction = async () => {
-    if (!description || !amount || !category) return;
+  const handleAddTransaction = async (transactionType: "income" | "expense") => {
+    if (!description || !amount) return;
 
     if (editingTransaction) {
-      // Update existing transaction
       await updateDoc(doc(db, "transactions", editingTransaction.id), {
         description,
         amount: parseFloat(amount),
         category,
+        type: transactionType,
       });
     } else {
-      // Add new transaction
       await addDoc(collection(db, "transactions"), {
         description,
         amount: parseFloat(amount),
         category,
+        type: transactionType,
         userId: user?.uid,
         createdAt: new Date(),
       });
     }
 
-    // Reset modal state
     setDescription("");
     setAmount("");
     setCategory("");
+    setType("expense");
     setEditingTransaction(null);
-    setIsModalOpen(false);
+    setExpenseModalOpen(false);
+    setIncomeModalOpen(false);
   };
-
+  const handleModalOpen = (opening : boolean, type : "income" | "expense") => {
+    setDescription("");
+    setAmount("");
+    setCategory("");
+    setType("expense");
+    if(type === "expense"){
+        setExpenseModalOpen(opening)
+    }else{
+        setIncomeModalOpen(opening)
+    }
+  }
   const handleEdit = (transaction: Transaction) => {
     setDescription(transaction.description);
     setAmount(transaction.amount.toString());
     setCategory(transaction.category);
     setEditingTransaction(transaction);
-    setIsModalOpen(true);
+    if(transaction.type === "expense"){
+        setExpenseModalOpen(true)
+    }else{
+        setIncomeModalOpen(true)
+    }
   };
 
   const handleDelete = async (id: string) => {
     await deleteDoc(doc(db, "transactions", id));
   };
 
-  if (loading) return <p>Loading...</p>; // wait for auth
-
+  if (loading) return <p>Loading...</p>;
   if (!user) return <p>Please log in to access the dashboard.</p>;
+
+  const incomeItems = transactions.filter((t) => t.type === "income");
+  const expenseItems = transactions.filter((t) => t.type === "expense");
 
   return (
     <div className="flex flex-col items-center min-h-screen bg-gray-50 text-gray-900 p-4">
       <div className="w-11/12 md:w-9/10 bg-white shadow-lg rounded-lg p-6 space-y-6 text-center">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p>Welcome, {user.email}!</p>
-        <div className="mt-4 text-left">
-          <SummarySection
-            totalSpent={totalSpent}
-            categoryTotals={categoryTotals}
-          />
-        </div>
 
-        <div className="mt-4 text-left">
-          <h2 className="text-xl font-semibold mb-2">Recent Transactions</h2>
-          <button
-            className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
-            onClick={() => setIsModalOpen(true)}
-          >
-            Add Transaction
-          </button>
+        <SummarySection
+          totalSpent={totalSpent}
+          totalIncome={totalIncome}
+          categoryTotals={categoryTotals}
+        />
+
+        {/* Income Section */}
+        <div className="flex flex-col mt-4 text-left">
+          <h2 className="text-xl font-semibold mb-2">Income</h2>
           <ul className="space-y-2">
-            {transactions.map((t) => (
+            {incomeItems.map((t) => (
               <TransactionItem
                 key={t.id}
                 transaction={t}
@@ -156,6 +171,33 @@ export default function Dashboard() {
               />
             ))}
           </ul>
+          <button
+            className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+            onClick={() => handleModalOpen(true, "income")}
+          >
+            Add Income
+          </button>
+        </div>
+
+        {/* Expense Section */}
+        <div className="flex flex-col mt-8 text-left">
+          <h2 className="text-xl font-semibold mb-2">Expenses</h2>
+          <ul className="space-y-2">
+            {expenseItems.map((t) => (
+              <TransactionItem
+                key={t.id}
+                transaction={t}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+              />
+            ))}
+          </ul>
+          <button
+            className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
+            onClick={() => handleModalOpen(true, "expense")}
+          >
+            Add Expense
+          </button>
         </div>
 
         <Link
@@ -165,16 +207,28 @@ export default function Dashboard() {
           Back to Home
         </Link>
       </div>
-      <TransactionModal
+
+      <ExpenseModal
         description={description}
         setDescription={setDescription}
         amount={amount}
         setAmount={setAmount}
         category={category}
         setCategory={setCategory}
-        isModalOpen={isModalOpen}
-        setIsModalOpen={setIsModalOpen}
-        handleAddTransaction={handleAddTransaction}
+        isModalOpen={isExpenseModalOpen}
+        setIsModalOpen={setExpenseModalOpen}
+        handleAddTransaction={() => handleAddTransaction("expense")}
+      />
+
+      <IncomeModal
+        description={description}
+        setDescription={setDescription}
+        amount={amount}
+        setAmount={setAmount}
+        setType={setType}
+        isModalOpen={isIncomeModalOpen}
+        setIsModalOpen={setIncomeModalOpen}
+        handleAddTransaction={() => handleAddTransaction("income")}
       />
     </div>
   );

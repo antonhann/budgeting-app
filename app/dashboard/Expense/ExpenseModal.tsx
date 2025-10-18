@@ -1,5 +1,4 @@
 import { Dispatch, SetStateAction } from "react";
-import { Transaction } from "@/types/transaction";
 
 interface Props {
   description: string;
@@ -13,7 +12,7 @@ interface Props {
   handleAddTransaction: () => void;
 }
 
-export const TransactionModal = ({
+export const ExpenseModal = ({
   description,
   setDescription,
   amount,
@@ -39,6 +38,7 @@ export const TransactionModal = ({
         <h2 className="text-2xl font-bold mb-4">Add Transaction</h2>
 
         <div className="space-y-3">
+          {/* Type selector */}
           <input
             type="text"
             placeholder="Description"
@@ -61,6 +61,7 @@ export const TransactionModal = ({
             <option value="">Select category</option>
             <option value="Food">🍔 Food</option>
             <option value="Bills">💡 Bills</option>
+            <option value="Life Style">🌿 Life Style</option>
             <option value="Entertainment">🎮 Entertainment</option>
             <option value="Other">📝 Other</option>
           </select>
