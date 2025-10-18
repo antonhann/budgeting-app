@@ -9,7 +9,7 @@ export default function Home() {
     const [password, setPassword] = useState("");
     const auth = getAuth();
     const router = useRouter();
-
+    
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try{
