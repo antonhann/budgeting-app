@@ -16,8 +16,9 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { Transaction } from "@/types/transaction";
-import { TransactionItem } from "@/components/TransactionItem";
-import { TransactionModal } from "@/components/TransactionModal";
+import { TransactionItem } from "@/app/dashboard/TransactionItem";
+import { TransactionModal } from "@/app/dashboard/TransactionModal";
+import { SummarySection } from "./SummarySection";
 
 export default function Dashboard() {
   const [user, setUser] = useState<typeof auth.currentUser | null>(null);
@@ -26,6 +27,11 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
+
+  const [totalSpent, setTotalSpent] = useState(0);
+  const [categoryTotals, setCategoryTotals] = useState<Record<string, number>>(
+    {}
+  );
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -56,6 +62,20 @@ export default function Dashboard() {
         ...(doc.data() as Omit<Transaction, "id">),
       }));
       setTransactions(data);
+      // --- Calculate summary ---
+      let total = 0;
+      const categoryMap: Record<string, number> = {};
+
+      data.forEach((t) => {
+        total += t.amount;
+        if (categoryMap[t.category]) {
+          categoryMap[t.category] += t.amount;
+        } else {
+          categoryMap[t.category] = t.amount;
+        }
+      });
+      setTotalSpent(total);
+      setCategoryTotals(categoryMap);
     });
 
     return () => unsubscribe();
@@ -107,20 +127,25 @@ export default function Dashboard() {
   if (!user) return <p>Please log in to access the dashboard.</p>;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 text-gray-900 p-4">
-      <div className="w-full max-w-md bg-white shadow-lg rounded-lg p-6 space-y-6 text-center">
+    <div className="flex flex-col items-center min-h-screen bg-gray-50 text-gray-900 p-4">
+      <div className="w-11/12 md:w-9/10 bg-white shadow-lg rounded-lg p-6 space-y-6 text-center">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p>Welcome, {user.email}!</p>
-
-        <button
-          className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
-          onClick={() => setIsModalOpen(true)}
-        >
-          Add Transaction
-        </button>
+        <div className="mt-4 text-left">
+          <SummarySection
+            totalSpent={totalSpent}
+            categoryTotals={categoryTotals}
+          />
+        </div>
 
         <div className="mt-4 text-left">
           <h2 className="text-xl font-semibold mb-2">Recent Transactions</h2>
+          <button
+            className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+            onClick={() => setIsModalOpen(true)}
+          >
+            Add Transaction
+          </button>
           <ul className="space-y-2">
             {transactions.map((t) => (
               <TransactionItem
