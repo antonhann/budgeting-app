@@ -4,14 +4,29 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, addDoc, query, where, orderBy, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  updateDoc,
+  doc,
+  deleteDoc,
+} from "firebase/firestore";
 import { Transaction } from "@/types/transaction";
+import { TransactionItem } from "@/components/TransactionItem";
+import { TransactionModal } from "@/components/TransactionModal";
 
 export default function Dashboard() {
   const [user, setUser] = useState<typeof auth.currentUser | null>(null);
   const [loading, setLoading] = useState(true); // track auth loading
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
+
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
@@ -47,20 +62,44 @@ export default function Dashboard() {
   }, [user]);
 
   const handleAddTransaction = async () => {
-    if (!description || !amount || !category || !user) return;
+    if (!description || !amount || !category) return;
 
-    await addDoc(collection(db, "transactions"), {
-      description,
-      amount: parseFloat(amount),
-      category,
-      userId: user.uid,
-      createdAt: new Date(),
-    });
+    if (editingTransaction) {
+      // Update existing transaction
+      await updateDoc(doc(db, "transactions", editingTransaction.id), {
+        description,
+        amount: parseFloat(amount),
+        category,
+      });
+    } else {
+      // Add new transaction
+      await addDoc(collection(db, "transactions"), {
+        description,
+        amount: parseFloat(amount),
+        category,
+        userId: user?.uid,
+        createdAt: new Date(),
+      });
+    }
 
+    // Reset modal state
     setDescription("");
     setAmount("");
     setCategory("");
+    setEditingTransaction(null);
     setIsModalOpen(false);
+  };
+
+  const handleEdit = (transaction: Transaction) => {
+    setDescription(transaction.description);
+    setAmount(transaction.amount.toString());
+    setCategory(transaction.category);
+    setEditingTransaction(transaction);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteDoc(doc(db, "transactions", id));
   };
 
   if (loading) return <p>Loading...</p>; // wait for auth
@@ -84,13 +123,12 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold mb-2">Recent Transactions</h2>
           <ul className="space-y-2">
             {transactions.map((t) => (
-              <li
+              <TransactionItem
                 key={t.id}
-                className="flex justify-between px-3 py-2 bg-gray-100 rounded-lg"
-              >
-                <span>{t.description} ({t.category})</span>
-                <span>${t.amount}</span>
-              </li>
+                transaction={t}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+              />
             ))}
           </ul>
         </div>
@@ -102,56 +140,17 @@ export default function Dashboard() {
           Back to Home
         </Link>
       </div>
-      {/* Modal */}
-        {isModalOpen && (
-            <div className="fixed inset-0 flex items-center justify-center z-50">
-                {/* Overlay */}
-                <div className="fixed inset-0 bg-gray-200/50 backdrop-blur-sm"></div>
-
-                {/* Modal content */}
-                <div className="relative bg-white rounded-lg shadow-lg p-6 w-full max-w-md z-50">
-                <h2 className="text-2xl font-bold mb-4">Add Transaction</h2>
-                <div className="space-y-3">
-                    <input
-                    type="text"
-                    placeholder="Description"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    />
-                    <input
-                    type="number"
-                    placeholder="Amount"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    />
-                    <input
-                    type="text"
-                    placeholder="Category"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg"
-                    />
-                </div>
-                <div className="flex justify-end gap-3 mt-4">
-                    <button
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 bg-gray-400 text-white rounded-xl hover:bg-gray-500 transition"
-                    >
-                    Cancel
-                    </button>
-                    <button
-                    onClick={handleAddTransaction}
-                    className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
-                    >
-                    Add
-                    </button>
-                </div>
-                </div>
-            </div>
-            )}
-
+      <TransactionModal
+        description={description}
+        setDescription={setDescription}
+        amount={amount}
+        setAmount={setAmount}
+        category={category}
+        setCategory={setCategory}
+        isModalOpen={isModalOpen}
+        setIsModalOpen={setIsModalOpen}
+        handleAddTransaction={handleAddTransaction}
+      />
     </div>
   );
 }
