@@ -1,20 +1,157 @@
 "use client";
 
 import Link from "next/link";
+import { useState, useEffect } from "react";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { collection, addDoc, query, where, orderBy, onSnapshot } from "firebase/firestore";
+import { Transaction } from "@/types/transaction";
 
 export default function Dashboard() {
+  const [user, setUser] = useState<typeof auth.currentUser | null>(null);
+  const [loading, setLoading] = useState(true); // track auth loading
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+
+  // 🔹 Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 🔹 Fetch transactions only after user is loaded
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "transactions"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Omit<Transaction, "id">),
+      }));
+      setTransactions(data);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleAddTransaction = async () => {
+    if (!description || !amount || !category || !user) return;
+
+    await addDoc(collection(db, "transactions"), {
+      description,
+      amount: parseFloat(amount),
+      category,
+      userId: user.uid,
+      createdAt: new Date(),
+    });
+
+    setDescription("");
+    setAmount("");
+    setCategory("");
+    setIsModalOpen(false);
+  };
+
+  if (loading) return <p>Loading...</p>; // wait for auth
+
+  if (!user) return <p>Please log in to access the dashboard.</p>;
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 text-gray-900 p-4">
-      <div className="w-full max-w-md bg-white shadow-lg rounded-lg p-6 space-y-4 text-center">
+      <div className="w-full max-w-md bg-white shadow-lg rounded-lg p-6 space-y-6 text-center">
         <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p>Welcome to your dashboard!</p>
+        <p>Welcome, {user.email}!</p>
+
+        <button
+          className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+          onClick={() => setIsModalOpen(true)}
+        >
+          Add Transaction
+        </button>
+
+        <div className="mt-4 text-left">
+          <h2 className="text-xl font-semibold mb-2">Recent Transactions</h2>
+          <ul className="space-y-2">
+            {transactions.map((t) => (
+              <li
+                key={t.id}
+                className="flex justify-between px-3 py-2 bg-gray-100 rounded-lg"
+              >
+                <span>{t.description} ({t.category})</span>
+                <span>${t.amount}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <Link
           href="/"
-          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
+          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition mt-4 inline-block"
         >
           Back to Home
         </Link>
       </div>
+      {/* Modal */}
+        {isModalOpen && (
+            <div className="fixed inset-0 flex items-center justify-center z-50">
+                {/* Overlay */}
+                <div className="fixed inset-0 bg-gray-200/50 backdrop-blur-sm"></div>
+
+                {/* Modal content */}
+                <div className="relative bg-white rounded-lg shadow-lg p-6 w-full max-w-md z-50">
+                <h2 className="text-2xl font-bold mb-4">Add Transaction</h2>
+                <div className="space-y-3">
+                    <input
+                    type="text"
+                    placeholder="Description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    />
+                    <input
+                    type="number"
+                    placeholder="Amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    />
+                    <input
+                    type="text"
+                    placeholder="Category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    />
+                </div>
+                <div className="flex justify-end gap-3 mt-4">
+                    <button
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 bg-gray-400 text-white rounded-xl hover:bg-gray-500 transition"
+                    >
+                    Cancel
+                    </button>
+                    <button
+                    onClick={handleAddTransaction}
+                    className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+                    >
+                    Add
+                    </button>
+                </div>
+                </div>
+            </div>
+            )}
+
     </div>
   );
 }

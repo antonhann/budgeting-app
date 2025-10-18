@@ -33,9 +33,6 @@ export default function Home() {
 
         {user ? (
           <div className="space-y-4">
-            <p className="text-lg">
-              Welcome, <span className="font-semibold">{user.email}</span> 👋
-            </p>
             <div className="flex gap-4 justify-center">
               <Link
                 href="/dashboard"
