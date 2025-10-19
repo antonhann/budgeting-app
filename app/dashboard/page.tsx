@@ -32,7 +32,9 @@ export default function Dashboard() {
 
   const [totalSpent, setTotalSpent] = useState(0);
   const [totalIncome, setTotalIncome] = useState(0);
-  const [categoryTotals, setCategoryTotals] = useState<Record<string, number>>({});
+  const [categoryTotals, setCategoryTotals] = useState<Record<string, number>>(
+    {}
+  );
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -84,7 +86,9 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleAddTransaction = async (transactionType: "income" | "expense") => {
+  const handleAddTransaction = async (
+    transactionType: "income" | "expense"
+  ) => {
     if (!description || !amount) return;
 
     if (editingTransaction) {
@@ -113,26 +117,26 @@ export default function Dashboard() {
     setExpenseModalOpen(false);
     setIncomeModalOpen(false);
   };
-  const handleModalOpen = (opening : boolean, type : "income" | "expense") => {
+  const handleModalOpen = (opening: boolean, type: "income" | "expense") => {
     setDescription("");
     setAmount("");
     setCategory("");
     setType("expense");
-    if(type === "expense"){
-        setExpenseModalOpen(opening)
-    }else{
-        setIncomeModalOpen(opening)
+    if (type === "expense") {
+      setExpenseModalOpen(opening);
+    } else {
+      setIncomeModalOpen(opening);
     }
-  }
+  };
   const handleEdit = (transaction: Transaction) => {
     setDescription(transaction.description);
     setAmount(transaction.amount.toString());
     setCategory(transaction.category);
     setEditingTransaction(transaction);
-    if(transaction.type === "expense"){
-        setExpenseModalOpen(true)
-    }else{
-        setIncomeModalOpen(true)
+    if (transaction.type === "expense") {
+      setExpenseModalOpen(true);
+    } else {
+      setIncomeModalOpen(true);
     }
   };
 
@@ -182,16 +186,34 @@ export default function Dashboard() {
         {/* Expense Section */}
         <div className="flex flex-col mt-8 text-left">
           <h2 className="text-xl font-semibold mb-2">Expenses</h2>
-          <ul className="space-y-2">
-            {expenseItems.map((t) => (
-              <TransactionItem
-                key={t.id}
-                transaction={t}
-                onDelete={handleDelete}
-                onEdit={handleEdit}
-              />
-            ))}
-          </ul>
+
+          {Object.entries(
+            expenseItems.reduce(
+              (acc, t) => {
+                if (!acc[t.category]) acc[t.category] = [];
+                acc[t.category].push(t);
+                return acc;
+              },
+              {} as Record<string, Transaction[]>
+            )
+          ).map(([category, transactions]) => (
+            <div key={category} className="mb-6">
+              <h3 className="text-lg font-medium mb-2 text-gray-700 border-b border-gray-200 pb-1">
+                {category || "Uncategorized"}
+              </h3>
+              <ul className="space-y-2">
+                {transactions.map((t) => (
+                  <TransactionItem
+                    key={t.id}
+                    transaction={t}
+                    onDelete={handleDelete}
+                    onEdit={handleEdit}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
+
           <button
             className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
             onClick={() => handleModalOpen(true, "expense")}
