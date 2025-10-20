@@ -128,17 +128,29 @@ export default function Dashboard() {
       setIncomeModalOpen(opening);
     }
   };
-  const handleEdit = (transaction: Transaction) => {
-    setDescription(transaction.description);
-    setAmount(transaction.amount.toString());
-    setCategory(transaction.category);
-    setEditingTransaction(transaction);
-    if (transaction.type === "expense") {
-      setExpenseModalOpen(true);
-    } else {
-      setIncomeModalOpen(true);
-    }
-  };
+
+  const handleEdit = async (updatedTransaction: Transaction, type: "expense" | "income") => {
+  try {
+    // Update the transaction locally (if stored in state)
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === updatedTransaction.id ? updatedTransaction : t))
+    );
+
+    // Optionally update in Firestore (if you're saving data there)
+    const docRef = doc(db, "transactions", updatedTransaction.id);
+    await updateDoc(docRef, {
+      description: updatedTransaction.description,
+      amount: updatedTransaction.amount,
+      category: updatedTransaction.category,
+      type: updatedTransaction.type,
+    });
+
+    console.log("✅ Transaction updated:", updatedTransaction);
+  } catch (error) {
+    console.error("Error updating transaction:", error);
+  }
+};
+
 
   const handleDelete = async (id: string) => {
     await deleteDoc(doc(db, "transactions", id));
