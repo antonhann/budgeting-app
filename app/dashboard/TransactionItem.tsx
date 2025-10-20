@@ -13,7 +13,30 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
   const handleChange = (field: keyof Transaction, value: string | number) => {
     const updated = { ...editedTransaction, [field]: value };
     setEditedTransaction(updated);
-    onEdit(updated, updated.type); // 🔄 instantly propagate change
+    onEdit(updated, updated.type);
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value;
+
+    // Allow empty string while typing
+    if (inputValue === "") {
+      setEditedTransaction((prev) => ({ ...prev, amount: 0 }));
+      return;
+    }
+
+    // Remove commas and trim
+    const cleaned = inputValue.replace(/,/g, "").trim();
+
+    // Convert to number safely
+    const numericValue = Number(cleaned);
+
+    // Only update if it's a valid number
+    if (!isNaN(numericValue)) {
+      const updated = { ...editedTransaction, amount: numericValue };
+      setEditedTransaction(updated);
+      onEdit(updated, updated.type);
+    }
   };
 
   return (
@@ -30,9 +53,10 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
           className="border border-gray-300 rounded px-2 py-1 w-full focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
         />
         <input
-          type="number"
-          value={editedTransaction.amount}
-          onChange={(e) => handleChange("amount", Number(e.target.value))}
+          type="text"
+          value={editedTransaction.amount.toString()}
+          onChange={handleAmountChange}
+          inputMode="decimal" // Mobile keyboard hint
           className="border border-gray-300 rounded px-2 py-1 w-24 text-right focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
         />
 
