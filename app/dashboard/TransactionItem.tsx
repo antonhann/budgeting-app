@@ -9,6 +9,9 @@ interface Props {
 
 export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
   const [editedTransaction, setEditedTransaction] = useState(transaction);
+  const [amountInput, setAmountInput] = useState(
+    transaction.amount.toLocaleString()
+  );
 
   const handleChange = (field: keyof Transaction, value: string | number) => {
     const updated = { ...editedTransaction, [field]: value };
@@ -17,26 +20,29 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
+    const raw = e.target.value;
+    setAmountInput(raw); // always show what user types
 
-    // Allow empty string while typing
-    if (inputValue === "") {
+    // Remove commas and spaces
+    const cleaned = raw.replace(/,/g, "").trim();
+
+    // Allow empty string (so backspace doesn’t break)
+    if (cleaned === "") {
       setEditedTransaction((prev) => ({ ...prev, amount: 0 }));
       return;
     }
 
-    // Remove commas and trim
-    const cleaned = inputValue.replace(/,/g, "").trim();
-
-    // Convert to number safely
     const numericValue = Number(cleaned);
-
-    // Only update if it's a valid number
     if (!isNaN(numericValue)) {
       const updated = { ...editedTransaction, amount: numericValue };
       setEditedTransaction(updated);
       onEdit(updated, updated.type);
     }
+  };
+
+  const handleAmountBlur = () => {
+    // Format the value nicely with commas when leaving input
+    setAmountInput(editedTransaction.amount.toLocaleString());
   };
 
   return (
@@ -54,9 +60,16 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
         />
         <input
           type="text"
-          value={editedTransaction.amount.toString()}
+          value={editedTransaction.category || ""}
+          onChange={(e) => handleChange("category", e.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 w-32 focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
+        />
+        <input
+          type="text"
+          value={amountInput}
           onChange={handleAmountChange}
-          inputMode="decimal" // Mobile keyboard hint
+          onBlur={handleAmountBlur}
+          inputMode="decimal"
           className="border border-gray-300 rounded px-2 py-1 w-24 text-right focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
         />
 
