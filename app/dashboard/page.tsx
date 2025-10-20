@@ -16,10 +16,11 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { Transaction } from "@/types/transaction";
-import { TransactionItem } from "@/app/dashboard/TransactionItem";
+import { TransactionItem } from "@/app/dashboard/Transaction/TransactionItem";
 import { ExpenseModal } from "@/app/dashboard/Expense/ExpenseModal";
 import { IncomeModal } from "@/app/dashboard/Income/IncomeModal";
 import { SummarySection } from "./SummarySection";
+import { TransactionList } from "./Transaction/TransactionList";
 
 export default function Dashboard() {
   const [user, setUser] = useState<typeof auth.currentUser | null>(null);
@@ -175,64 +176,26 @@ export default function Dashboard() {
         />
 
         {/* Income Section */}
-        <div className="flex flex-col mt-4 text-left">
-          <h2 className="text-xl font-semibold mb-2">Income</h2>
-          <ul className="space-y-2">
-            {incomeItems.map((t) => (
-              <TransactionItem
-                key={t.id}
-                transaction={t}
-                onDelete={handleDelete}
-                onEdit={handleEdit}
-              />
-            ))}
-          </ul>
-          <button
-            className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
-            onClick={() => handleModalOpen(true, "income")}
-          >
-            Add Income
-          </button>
-        </div>
+        <TransactionList
+          title="Income"
+          transactions={incomeItems}
+          type="income"
+          onDelete={handleDelete}
+          onEdit={handleEdit}
+          onOpenModal={(type) => handleModalOpen(true, type)}
+        />
+
 
         {/* Expense Section */}
-        <div className="flex flex-col mt-8 text-left">
-          <h2 className="text-xl font-semibold mb-2">Expenses</h2>
+        <TransactionList
+          title="Expense"
+          transactions={expenseItems}
+          type="expense"
+          onDelete={handleDelete}
+          onEdit={handleEdit}
+          onOpenModal={(type) => handleModalOpen(true, type)}
+        />
 
-          {Object.entries(
-            expenseItems.reduce(
-              (acc, t) => {
-                if (!acc[t.category]) acc[t.category] = [];
-                acc[t.category].push(t);
-                return acc;
-              },
-              {} as Record<string, Transaction[]>
-            )
-          ).map(([category, transactions]) => (
-            <div key={category} className="mb-6">
-              <h3 className="text-lg font-medium mb-2 text-gray-700 border-b border-gray-200 pb-1">
-                {category || "Uncategorized"}
-              </h3>
-              <ul className="space-y-2">
-                {transactions.map((t) => (
-                  <TransactionItem
-                    key={t.id}
-                    transaction={t}
-                    onDelete={handleDelete}
-                    onEdit={handleEdit}
-                  />
-                ))}
-              </ul>
-            </div>
-          ))}
-
-          <button
-            className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
-            onClick={() => handleModalOpen(true, "expense")}
-          >
-            Add Expense
-          </button>
-        </div>
 
         <Link
           href="/"

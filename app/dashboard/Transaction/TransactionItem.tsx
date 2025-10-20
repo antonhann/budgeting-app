@@ -26,7 +26,6 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
     // Remove commas and spaces
     const cleaned = raw.replace(/,/g, "").trim();
 
-    // Allow empty string (so backspace doesn’t break)
     if (cleaned === "") {
       setEditedTransaction((prev) => ({ ...prev, amount: 0 }));
       return;
@@ -57,12 +56,6 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
           value={editedTransaction.description}
           onChange={(e) => handleChange("description", e.target.value)}
           className="border border-gray-300 rounded px-2 py-1 w-full focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
-        />
-        <input
-          type="text"
-          value={editedTransaction.category || ""}
-          onChange={(e) => handleChange("category", e.target.value)}
-          className="border border-gray-300 rounded px-2 py-1 w-32 focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
         />
         <input
           type="text"
