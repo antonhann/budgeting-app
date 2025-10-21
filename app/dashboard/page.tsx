@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -16,11 +16,12 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { Transaction } from "@/types/transaction";
-import { TransactionItem } from "@/app/dashboard/Transaction/TransactionItem";
+import { TransactionList } from "./Transaction/TransactionList";
+import { SummarySection } from "./SummarySection";
 import { ExpenseModal } from "@/app/dashboard/Expense/ExpenseModal";
 import { IncomeModal } from "@/app/dashboard/Income/IncomeModal";
-import { SummarySection } from "./SummarySection";
-import { TransactionList } from "./Transaction/TransactionList";
+import { DateFilter } from "./DateFilter";
+import { FilterState } from "@/types/filterState";
 
 export default function Dashboard() {
   const [user, setUser] = useState<typeof auth.currentUser | null>(null);
@@ -31,17 +32,26 @@ export default function Dashboard() {
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
 
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+
   const [totalSpent, setTotalSpent] = useState(0);
   const [totalIncome, setTotalIncome] = useState(0);
   const [categoryTotals, setCategoryTotals] = useState<Record<string, number>>(
     {}
   );
 
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("");
-  const [type, setType] = useState<"income" | "expense">("expense");
+  // Date filter state
+  const [filter, setFilter] = useState<FilterState>({
+    type: "month",
+    month: new Date().getMonth(),
+    year: new Date().getFullYear(),
+    startDate: null,
+    endDate: null,
+  });
 
+  // Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -50,6 +60,26 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
+  // Compute start/end dates based on filter
+  const computeFilterDates = useCallback(() => {
+    let start: Date | null = null;
+    let end: Date | null = null;
+
+    if (filter.type === "month") {
+      start = new Date(filter.year, filter.month, 1);
+      end = new Date(filter.year, filter.month + 1, 0, 23, 59, 59);
+    } else if (filter.type === "year") {
+      start = new Date(filter.year, 0, 1);
+      end = new Date(filter.year, 11, 31, 23, 59, 59);
+    } else if (filter.type === "custom") {
+      start = filter.startDate;
+      end = filter.endDate;
+    }
+
+    return { start, end };
+  }, [filter]);
+
+  // Firestore listener
   useEffect(() => {
     if (!user) return;
 
@@ -60,12 +90,26 @@ export default function Dashboard() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
+      let data = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...(doc.data() as Omit<Transaction, "id">),
       }));
+
+      // Filter by selected dates
+      const { start, end } = computeFilterDates();
+      if (start || end) {
+        data = data.filter((t) => {
+          const createdAt =
+            t.createdAt instanceof Date ? t.createdAt : t.createdAt.toDate();
+          if (start && createdAt < start) return false;
+          if (end && createdAt > end) return false;
+          return true;
+        });
+      }
+
       setTransactions(data);
 
+      // recalc totals
       let spent = 0;
       let income = 0;
       const categoryMap: Record<string, number> = {};
@@ -85,8 +129,9 @@ export default function Dashboard() {
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, computeFilterDates]);
 
+  // Add / Update transaction
   const handleAddTransaction = async (
     transactionType: "income" | "expense"
   ) => {
@@ -113,45 +158,41 @@ export default function Dashboard() {
     setDescription("");
     setAmount("");
     setCategory("");
-    setType("expense");
     setEditingTransaction(null);
     setExpenseModalOpen(false);
     setIncomeModalOpen(false);
   };
-  const handleModalOpen = (opening: boolean, type: "income" | "expense") => {
+
+  const handleModalOpen = (
+    opening: boolean,
+    modalType: "income" | "expense"
+  ) => {
     setDescription("");
     setAmount("");
     setCategory("");
-    setType("expense");
-    if (type === "expense") {
-      setExpenseModalOpen(opening);
-    } else {
-      setIncomeModalOpen(opening);
-    }
+    if (modalType === "expense") setExpenseModalOpen(opening);
+    else setIncomeModalOpen(opening);
   };
 
-  const handleEdit = async (updatedTransaction: Transaction, type: "expense" | "income") => {
-  try {
-    // Update the transaction locally (if stored in state)
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === updatedTransaction.id ? updatedTransaction : t))
-    );
+  const handleEdit = async (updatedTransaction: Transaction) => {
+    try {
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.id === updatedTransaction.id ? updatedTransaction : t
+        )
+      );
 
-    // Optionally update in Firestore (if you're saving data there)
-    const docRef = doc(db, "transactions", updatedTransaction.id);
-    await updateDoc(docRef, {
-      description: updatedTransaction.description,
-      amount: updatedTransaction.amount,
-      category: updatedTransaction.category,
-      type: updatedTransaction.type,
-    });
-
-    console.log("✅ Transaction updated:", updatedTransaction);
-  } catch (error) {
-    console.error("Error updating transaction:", error);
-  }
-};
-
+      const docRef = doc(db, "transactions", updatedTransaction.id);
+      await updateDoc(docRef, {
+        description: updatedTransaction.description,
+        amount: updatedTransaction.amount,
+        category: updatedTransaction.category,
+        type: updatedTransaction.type,
+      });
+    } catch (error) {
+      console.error("Error updating transaction:", error);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     await deleteDoc(doc(db, "transactions", id));
@@ -164,47 +205,58 @@ export default function Dashboard() {
   const expenseItems = transactions.filter((t) => t.type === "expense");
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-gray-50 text-gray-900 p-4">
-      <div className="w-11/12 md:w-9/10 bg-white shadow-lg rounded-lg p-6 space-y-6 text-center">
+    <div className="min-h-screen p-4 bg-gray-50 text-gray-900">
+      <div className="max-w-7xl mx-auto mb-6 text-center md:text-left">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p>Welcome, {user.email}!</p>
-
-        <SummarySection
-          totalSpent={totalSpent}
-          totalIncome={totalIncome}
-          categoryTotals={categoryTotals}
-        />
-
-        {/* Income Section */}
-        <TransactionList
-          title="Income"
-          transactions={incomeItems}
-          type="income"
-          onDelete={handleDelete}
-          onEdit={handleEdit}
-          onOpenModal={(type) => handleModalOpen(true, type)}
-        />
-
-
-        {/* Expense Section */}
-        <TransactionList
-          title="Expense"
-          transactions={expenseItems}
-          type="expense"
-          onDelete={handleDelete}
-          onEdit={handleEdit}
-          onOpenModal={(type) => handleModalOpen(true, type)}
-        />
-
-
-        <Link
-          href="/"
-          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition mt-4 inline-block"
-        >
-          Back to Home
-        </Link>
       </div>
 
+      <DateFilter filter={filter} setFilter={setFilter} />
+
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Summary Section */}
+        <div className="bg-white shadow-lg rounded-lg p-6">
+          <SummarySection
+            totalSpent={totalSpent}
+            totalIncome={totalIncome}
+            categoryTotals={categoryTotals}
+          />
+        </div>
+
+        {/* Income Section */}
+        <div className="bg-white shadow-lg rounded-lg p-6">
+          <TransactionList
+            title="Income"
+            transactions={incomeItems}
+            onDelete={handleDelete}
+            onEdit={handleEdit}
+          />
+          <button
+            className="px-4 py-2 rounded-xl text-white transition bg-green-600 hover:bg-green-700"
+            onClick={() => handleModalOpen(true, "income")}
+          >
+            Add Income
+          </button>
+        </div>
+
+        {/* Expenses Section */}
+        <div className="md:col-span-2 bg-white shadow-lg rounded-lg p-6">
+          <TransactionList
+            title="Expense"
+            transactions={expenseItems}
+            onDelete={handleDelete}
+            onEdit={handleEdit}
+          />
+          <button
+            className="px-4 py-2 rounded-xl text-white transition bg-red-600 hover:bg-red-700"
+            onClick={() => handleModalOpen(true, "expense")}
+          >
+            Add Expense
+          </button>
+        </div>
+      </div>
+
+      {/* Modals */}
       <ExpenseModal
         description={description}
         setDescription={setDescription}
@@ -222,11 +274,19 @@ export default function Dashboard() {
         setDescription={setDescription}
         amount={amount}
         setAmount={setAmount}
-        setType={setType}
         isModalOpen={isIncomeModalOpen}
         setIsModalOpen={setIncomeModalOpen}
         handleAddTransaction={() => handleAddTransaction("income")}
       />
+
+      <div className="mt-6 text-center">
+        <Link
+          href="/"
+          className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
+        >
+          Back to Home
+        </Link>
+      </div>
     </div>
   );
 }

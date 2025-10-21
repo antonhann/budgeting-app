@@ -5,7 +5,6 @@ interface IncomeModalProps {
   setDescription: (value: string) => void;
   amount: string;
   setAmount: (value: string) => void;
-  setType: (value: "income" | "expense") => void;
   isModalOpen: boolean;
   setIsModalOpen: (value: boolean) => void;
   handleAddTransaction: () => void;
@@ -16,7 +15,6 @@ export const IncomeModal = ({
   setDescription,
   amount,
   setAmount,
-  setType,
   isModalOpen,
   setIsModalOpen,
   handleAddTransaction,
@@ -52,7 +50,6 @@ export const IncomeModal = ({
           <button
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
             onClick={() => {
-              setType("income");
               handleAddTransaction();
             }}
           >
