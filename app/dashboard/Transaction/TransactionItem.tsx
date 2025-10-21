@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Transaction } from "@/types/transaction";
+import { AmountInput } from "@/components/AmountInput";
 
 interface Props {
   transaction: Transaction;
@@ -9,9 +10,6 @@ interface Props {
 
 export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
   const [editedTransaction, setEditedTransaction] = useState(transaction);
-  const [amountInput, setAmountInput] = useState(
-    transaction.amount.toLocaleString()
-  );
 
   const handleChange = (field: keyof Transaction, value: string | number) => {
     const updated = { ...editedTransaction, [field]: value };
@@ -19,30 +17,6 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
     onEdit(updated, updated.type);
   };
 
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    setAmountInput(raw); // always show what user types
-
-    // Remove commas and spaces
-    const cleaned = raw.replace(/,/g, "").trim();
-
-    if (cleaned === "") {
-      setEditedTransaction((prev) => ({ ...prev, amount: 0 }));
-      return;
-    }
-
-    const numericValue = Number(cleaned);
-    if (!isNaN(numericValue)) {
-      const updated = { ...editedTransaction, amount: numericValue };
-      setEditedTransaction(updated);
-      onEdit(updated, updated.type);
-    }
-  };
-
-  const handleAmountBlur = () => {
-    // Format the value nicely with commas when leaving input
-    setAmountInput(editedTransaction.amount.toLocaleString());
-  };
 
   return (
     <li
@@ -57,12 +31,9 @@ export const TransactionItem = ({ transaction, onDelete, onEdit }: Props) => {
           onChange={(e) => handleChange("description", e.target.value)}
           className="border border-gray-300 rounded px-2 py-1 w-full focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
         />
-        <input
-          type="text"
-          value={amountInput}
-          onChange={handleAmountChange}
-          onBlur={handleAmountBlur}
-          inputMode="decimal"
+        <AmountInput
+          value={editedTransaction.amount}
+          onChange={(val) => handleChange("amount", val)}
           className="border border-gray-300 rounded px-2 py-1 w-24 text-right focus:border-blue-400 focus:ring-1 focus:ring-blue-300"
         />
 

@@ -19,9 +19,14 @@ import { Transaction } from "@/types/transaction";
 import { TransactionList } from "./Transaction/TransactionList";
 import { SummarySection } from "./SummarySection";
 import { ExpenseModal } from "@/app/dashboard/Expense/ExpenseModal";
-import { IncomeModal } from "@/app/dashboard/Income/IncomeModal";
+import {
+  IncomeModal,
+  IncomeStreamForm,
+} from "@/app/dashboard/Income/IncomeModal";
 import { DateFilter } from "./DateFilter";
 import { FilterState } from "@/types/filterState";
+import { Income } from "@/types/incomeStream";
+import { IncomeList } from "./Income/IncomeList";
 
 export default function Dashboard() {
   const [user, setUser] = useState<typeof auth.currentUser | null>(null);
@@ -35,13 +40,22 @@ export default function Dashboard() {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
+  const [incomeStreams, setIncomeStreams] = useState<Income[]>([]);
+  // Income stream state
 
+  // Form state
+  const [streamForm, setStreamForm] = useState<IncomeStreamForm>({
+    name: "",
+    type: "monthly",
+    amount: "",
+    hoursPerWeek: "",
+    startDate: "",
+  });
   const [totalSpent, setTotalSpent] = useState(0);
   const [totalIncome, setTotalIncome] = useState(0);
   const [categoryTotals, setCategoryTotals] = useState<Record<string, number>>(
     {}
   );
-
   // Date filter state
   const [filter, setFilter] = useState<FilterState>({
     type: "month",
@@ -78,57 +92,167 @@ export default function Dashboard() {
 
     return { start, end };
   }, [filter]);
-
-  // Firestore listener
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
+    const transactionsQuery = query(
       collection(db, "transactions"),
       where("userId", "==", user.uid),
       orderBy("createdAt", "desc")
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Transaction, "id">),
-      }));
+    const incomeStreamsQuery = query(
+      collection(db, "incomeStreams"),
+      where("userId", "==", user.uid)
+    );
 
-      // Filter by selected dates
-      const { start, end } = computeFilterDates();
-      if (start || end) {
-        data = data.filter((t) => {
-          const createdAt =
-            t.createdAt instanceof Date ? t.createdAt : t.createdAt.toDate();
-          if (start && createdAt < start) return false;
-          if (end && createdAt > end) return false;
-          return true;
-        });
-      }
-
-      setTransactions(data);
-
-      // recalc totals
-      let spent = 0;
-      let income = 0;
-      const categoryMap: Record<string, number> = {};
-
-      data.forEach((t) => {
-        if (t.type === "expense") {
-          spent += t.amount;
-          categoryMap[t.category] = (categoryMap[t.category] || 0) + t.amount;
-        } else {
-          income += t.amount;
+    const computeTotalIncome = (
+      streams: Income[],
+      filterType: "month" | "year" | "custom",
+      start?: Date | null,
+      end?: Date | null
+    ) => {
+      const monthlyEquivalent = (s: Income) => {
+        switch (s.type) {
+          case "cash":
+            return s.amount; // one-time cash
+          case "biweekly":
+            return s.amount * 2; // approx monthly
+          case "monthly":
+            return s.amount;
+          case "yearly":
+            return s.amount / 12;
+          default:
+            return 0;
         }
-      });
+      };
 
-      setTotalSpent(spent);
-      setCategoryTotals(categoryMap);
-      setTotalIncome(income);
-    });
+      const yearlyEquivalent = (s: Income) => monthlyEquivalent(s) * 12;
 
-    return () => unsubscribe();
+      const dailyEquivalent = (s: Income) => yearlyEquivalent(s) / 365;
+
+      if (filterType === "custom" && start && end) {
+        // Custom date range → calculate based on daily equivalent
+        return streams.reduce((sum, s) => {
+          if (!s.startDate) return sum;
+
+          const streamStart = new Date(s.startDate);
+          const streamEnd = s.endDate ? new Date(s.endDate) : end;
+
+          const overlapStart = streamStart > start ? streamStart : start;
+          const overlapEnd = streamEnd < end ? streamEnd : end;
+
+          const diffMs = overlapEnd.getTime() - overlapStart.getTime();
+          if (diffMs <= 0) return sum;
+
+          const days = diffMs / (1000 * 60 * 60 * 24);
+          const total = sum + dailyEquivalent(s) * days;
+          return Math.round(total * 100) / 100
+        }, 0);
+      } else if (filterType === "year") {
+        // Year view → sum yearly equivalents
+        return streams.reduce((sum, s) => sum + yearlyEquivalent(s), 0);
+      } else {
+        // Month view or default → sum monthly equivalents
+        return streams.reduce((sum, s) => sum + monthlyEquivalent(s), 0);
+      }
+    };
+
+    const unsubscribeTransactions = onSnapshot(
+      transactionsQuery,
+      (snapshot) => {
+        let data = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<Transaction, "id">),
+        }));
+
+        // Filter by selected dates
+        const { start, end } = computeFilterDates();
+        if (start || end) {
+          data = data.filter((t) => {
+            const createdAt =
+              t.createdAt instanceof Date ? t.createdAt : t.createdAt.toDate();
+            if (start && createdAt < start) return false;
+            if (end && createdAt > end) return false;
+            return true;
+          });
+        }
+        setTransactions(data);
+
+        // Recalc totals
+        const spent = data
+          .filter((t) => t.type === "expense")
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        const categoryMap: Record<string, number> = {};
+        data.forEach((t) => {
+          if (t.type === "expense") {
+            categoryMap[t.category] = (categoryMap[t.category] || 0) + t.amount;
+          }
+        });
+
+        setTotalSpent(spent);
+        setCategoryTotals(categoryMap);
+      }
+    );
+
+    const unsubscribeIncomeStreams = onSnapshot(
+      incomeStreamsQuery,
+      (snapshot) => {
+        const streams = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<Income, "id">),
+        }));
+
+        const { start, end } = computeFilterDates();
+
+        const filteredStreams = streams.filter((s) => {
+          if (!s.startDate) return false;
+
+          // Convert startDate
+          let startDate: Date;
+          if (
+            "toDate" in s.startDate &&
+            typeof s.startDate.toDate === "function"
+          ) {
+            startDate = s.startDate.toDate();
+          } else {
+            startDate = new Date(s.startDate);
+          }
+
+          // Convert endDate if exists
+          let endDate: Date | null = null;
+          if (s.endDate) {
+            if (
+              "toDate" in s.endDate &&
+              typeof s.endDate.toDate === "function"
+            ) {
+              endDate = s.endDate.toDate();
+            } else {
+              endDate = new Date(s.endDate);
+            }
+          }
+
+          // Income is active if:
+          //  - startDate <= filter end
+          //  - AND (no endDate OR endDate >= filter start)
+          const activeInRange =
+            (!end || startDate <= end) &&
+            (!endDate || !start || endDate >= start);
+
+          return activeInRange;
+        });
+        setIncomeStreams(filteredStreams);
+        setTotalIncome(
+          computeTotalIncome(filteredStreams, filter.type, start, end)
+        );
+      }
+    );
+
+    return () => {
+      unsubscribeTransactions();
+      unsubscribeIncomeStreams();
+    };
   }, [user, computeFilterDates]);
 
   // Add / Update transaction
@@ -161,6 +285,73 @@ export default function Dashboard() {
     setEditingTransaction(null);
     setExpenseModalOpen(false);
     setIncomeModalOpen(false);
+  };
+  const handleAddIncomeStream = async () => {
+    const { name, type, amount, hoursPerWeek, startDate } = streamForm;
+    if (!name || !amount) return;
+
+    // Use current date if startDate is missing or invalid
+    const parsedStartDate = startDate ? new Date(startDate) : new Date();
+
+    await addDoc(collection(db, "incomeStreams"), {
+      userId: user?.uid,
+      name,
+      type,
+      amount: parseFloat(amount),
+      // Only include hoursPerWeek if hourly
+      ...(type === "hourly"
+        ? { hoursPerWeek: parseFloat(hoursPerWeek || "0") }
+        : {}),
+      startDate: parsedStartDate,
+    });
+
+    setStreamForm({
+      name: "",
+      type: "biweekly",
+      amount: "",
+      hoursPerWeek: "",
+      startDate: "",
+    });
+    setIncomeModalOpen(false);
+  };
+
+  const handleDeleteIncomeStream = async (id: string) => {
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, "incomeStreams", id));
+
+      // Update local state
+      setIncomeStreams((prev) => prev.filter((s) => s.id !== id));
+    } catch (error) {
+      console.error("Failed to delete income stream:", error);
+    }
+  };
+  const handleEditIncomeStream = async (updated: Income & { id: string }) => {
+    if (!updated.id) return;
+
+    const data: Partial<Income> = {
+      name: updated.name,
+      type: updated.type,
+      amount: updated.amount,
+    };
+
+    // Only add startDate if valid
+    if (updated.startDate) {
+      if (updated.startDate instanceof Date) {
+        data.startDate = updated.startDate;
+      } else {
+        const parsedDate = new Date(updated.startDate);
+        if (!isNaN(parsedDate.getTime())) {
+          data.startDate = parsedDate;
+        }
+      }
+    }
+
+    await updateDoc(doc(db, "incomeStreams", updated.id), data);
+
+    setIncomeStreams((prev) =>
+      prev.map((s) => (s.id === updated.id ? { ...s, ...data } : s))
+    );
   };
 
   const handleModalOpen = (
@@ -201,7 +392,6 @@ export default function Dashboard() {
   if (loading) return <p>Loading...</p>;
   if (!user) return <p>Please log in to access the dashboard.</p>;
 
-  const incomeItems = transactions.filter((t) => t.type === "income");
   const expenseItems = transactions.filter((t) => t.type === "expense");
 
   return (
@@ -225,17 +415,17 @@ export default function Dashboard() {
 
         {/* Income Section */}
         <div className="bg-white shadow-lg rounded-lg p-6">
-          <TransactionList
-            title="Income"
-            transactions={incomeItems}
-            onDelete={handleDelete}
-            onEdit={handleEdit}
+          <IncomeList
+            title="Income Streams"
+            streams={incomeStreams} // your state for income streams
+            onDelete={handleDeleteIncomeStream}
+            onEdit={handleEditIncomeStream}
           />
           <button
-            className="px-4 py-2 rounded-xl text-white transition bg-green-600 hover:bg-green-700"
-            onClick={() => handleModalOpen(true, "income")}
+            className="px-4 py-2 rounded-xl text-white transition bg-green-600 hover:bg-green-700 mt-2"
+            onClick={() => setIncomeModalOpen(true)}
           >
-            Add Income
+            Add Income Stream
           </button>
         </div>
 
@@ -269,14 +459,13 @@ export default function Dashboard() {
         handleAddTransaction={() => handleAddTransaction("expense")}
       />
 
+      {/* Income Modal */}
       <IncomeModal
-        description={description}
-        setDescription={setDescription}
-        amount={amount}
-        setAmount={setAmount}
         isModalOpen={isIncomeModalOpen}
         setIsModalOpen={setIncomeModalOpen}
-        handleAddTransaction={() => handleAddTransaction("income")}
+        streamForm={streamForm}
+        setStreamForm={setStreamForm}
+        handleAddIncomeStream={handleAddIncomeStream}
       />
 
       <div className="mt-6 text-center">
