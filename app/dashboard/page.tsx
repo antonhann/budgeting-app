@@ -130,7 +130,7 @@ export default function Dashboard() {
       const yearlyEquivalent = (s: Income) => monthlyEquivalent(s) * 12;
 
       const dailyEquivalent = (s: Income) => yearlyEquivalent(s) / 365;
-
+      let total; 
       if (filterType === "custom" && start && end) {
         // Custom date range → calculate based on daily equivalent
         return streams.reduce((sum, s) => {
@@ -146,16 +146,18 @@ export default function Dashboard() {
           if (diffMs <= 0) return sum;
 
           const days = diffMs / (1000 * 60 * 60 * 24);
-          const total = sum + dailyEquivalent(s) * days;
+          total = sum + dailyEquivalent(s) * days;
           return Math.round(total * 100) / 100
         }, 0);
       } else if (filterType === "year") {
         // Year view → sum yearly equivalents
-        return streams.reduce((sum, s) => sum + yearlyEquivalent(s), 0);
+        total = streams.reduce((sum, s) => sum + yearlyEquivalent(s), 0);
       } else {
         // Month view or default → sum monthly equivalents
-        return streams.reduce((sum, s) => sum + monthlyEquivalent(s), 0);
+        total = streams.reduce((sum, s) => sum + monthlyEquivalent(s), 0);
       }
+      return Math.round(total * 100) / 100
+
     };
 
     const unsubscribeTransactions = onSnapshot(
@@ -178,7 +180,7 @@ export default function Dashboard() {
           });
         }
         setTransactions(data);
-
+        
         // Recalc totals
         const spent = data
           .filter((t) => t.type === "expense")
@@ -243,6 +245,7 @@ export default function Dashboard() {
           return activeInRange;
         });
         setIncomeStreams(filteredStreams);
+        console.log(filteredStreams)
         setTotalIncome(
           computeTotalIncome(filteredStreams, filter.type, start, end)
         );
@@ -303,6 +306,7 @@ export default function Dashboard() {
         ? { hoursPerWeek: parseFloat(hoursPerWeek || "0") }
         : {}),
       startDate: parsedStartDate,
+      endDate: parsedStartDate
     });
 
     setStreamForm({

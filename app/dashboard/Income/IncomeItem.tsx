@@ -35,7 +35,6 @@ export const IncomeItem = ({ stream, onDelete, onEdit }: Props) => {
           }
           className="border border-gray-300 rounded px-2 py-1 w-28"
         >
-          <option value="hourly">Hourly</option>
           <option value="cash">Cash</option>
           <option value="biweekly">Biweekly</option>
           <option value="monthly">Monthly</option>
